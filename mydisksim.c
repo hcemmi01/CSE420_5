@@ -38,7 +38,7 @@ void fcfs(DiskRequest *requests, int count, const char *outputFile) {
         printf("Error opening the output file during FCFS\n");
         return;
     }
-    // Requests are already sorted by arrival time
+    //Requests are already sorted by arrival time
     double currentTime = 0;
     int currCylinder = 0;
     double currentSectorOffset = 0;
@@ -79,7 +79,7 @@ void fcfs(DiskRequest *requests, int count, const char *outputFile) {
         currentTime = finishTime;
         currCylinder = requests[i].cylinder;
         int psn_after = requests[i].psn + requests[i].request_size;
-        double sectorsTransferred = requests[i].request_size; // Since in sample output they add request_size
+        double sectorsTransferred = requests[i].request_size;
         currentSectorOffset = requests[i].sector_offset + sectorsTransferred;
         currentSectorOffset = fmod(currentSectorOffset, SECTORSPERTRACK);
         int sectorsPerCylinder = SECTORSPERTRACK * TRACKSPERCYLINDER;
@@ -94,9 +94,7 @@ void fcfs(DiskRequest *requests, int count, const char *outputFile) {
         printf("  Finish Time: %lf\n", finishTime);*/
 
         // Output to file: arrival time, finish time, waiting time, psn_after, cylinder, surface, sector offset, seek distance
-        fprintf(file, "%lf %lf %lf %d %d %d %lf %d\n",
-                requests[i].arrival_time, finishTime, waitTime,
-                psn_after, currCylinder, surface, currentSectorOffset, seekDistance);
+        fprintf(file, "%lf %lf %lf %d %d %d %lf %d\n", requests[i].arrival_time, finishTime, waitTime, psn_after, currCylinder, surface, currentSectorOffset, seekDistance);
     }
     fclose(file);
 }
@@ -107,17 +105,14 @@ void sstf(DiskRequest *requests, int count, const char *outputFile) {
         printf("Error opening the output file during SSTF\n");
         return;
     }
-
     double currentTime = 0;
     int currCylinder = 0;
     double currentSectorOffset = 0;
     int *processed = (int *)calloc(count, sizeof(int));
     int processedCount = 0;
-
     while (processedCount < count) {
         int nextRequestIndex = -1;
         int shortestSeekDistance = 2147483647;
-
         //shortest time seach
         for (int i = 0; i < count; i++) {
             if (!processed[i] && requests[i].arrival_time <= currentTime) {
@@ -128,7 +123,6 @@ void sstf(DiskRequest *requests, int count, const char *outputFile) {
                 }
             }
         }
-
         //move time forward
         if (nextRequestIndex == -1) {
             for (int i = 0; i < count; i++) {
@@ -139,30 +133,40 @@ void sstf(DiskRequest *requests, int count, const char *outputFile) {
                 }
             }
         }
-
         if (nextRequestIndex == -1) {
             break;
         }
-
         DiskRequest *request = &requests[nextRequestIndex];
         processed[nextRequestIndex] = 1;
         processedCount++;
         //calculate info
         int seekDistance = abs(currCylinder - request->cylinder);
-        double seekTime = (seekDistance == 0) ? 0 : ((0.000028 * seekDistance) + 2) / 1000.0;
+        double seekTime;
+        if (seekDistance == 0) {
+            seekTime = 0;
+        } else {
+            seekTime = ((0.000028 * seekDistance) + 2) / 1000.0;
+        }
         double rotationPeriod = 60.0 / RPM;
         double sectorsPerSecond = SECTORSPERTRACK / rotationPeriod;
         double sectorsPassedDuringSeek = seekTime * sectorsPerSecond;
         currentSectorOffset += sectorsPassedDuringSeek;
         currentSectorOffset = fmod(currentSectorOffset, SECTORSPERTRACK);
         double travelTimePerSector = rotationPeriod / SECTORSPERTRACK;
-        double sectorsToGo = (currentSectorOffset <= request->sector_offset) ?
-                             request->sector_offset - currentSectorOffset :
-                             SECTORSPERTRACK - (currentSectorOffset - request->sector_offset);
+        double sectorsToGo;
+        if (currentSectorOffset <= request->sector_offset) {
+            sectorsToGo = request->sector_offset - currentSectorOffset;
+        } else {
+            sectorsToGo = SECTORSPERTRACK - (currentSectorOffset - request->sector_offset);
+        }
         double rotationalLatency = sectorsToGo * travelTimePerSector;
         double transferTime = (request->request_size * LOGICALBLOCKSIZE) / TRANSFERRATE;
-        double waitTime = (currentTime > request->arrival_time) ?
-                          currentTime - request->arrival_time : 0;
+        double waitTime;
+        if (currentTime > request->arrival_time) {
+            waitTime = currentTime - request->arrival_time;
+        } else {
+            waitTime = 0;
+        }
         double serviceTime = seekTime + rotationalLatency + transferTime;
         double finishTime = request->arrival_time + waitTime + serviceTime;
         currentTime = finishTime;
@@ -173,10 +177,7 @@ void sstf(DiskRequest *requests, int count, const char *outputFile) {
         currentSectorOffset = fmod(currentSectorOffset, SECTORSPERTRACK);
         int sectorsPerCylinder = SECTORSPERTRACK * TRACKSPERCYLINDER;
         int surface = (psn_after % sectorsPerCylinder) / SECTORSPERTRACK;
-
-        fprintf(file, "%lf %lf %lf %d %d %d %lf %d\n",
-                request->arrival_time, finishTime, waitTime,
-                psn_after, currCylinder, surface, currentSectorOffset, seekDistance);
+        fprintf(file, "%lf %lf %lf %d %d %d %lf %d\n", request->arrival_time, finishTime, waitTime, psn_after, currCylinder, surface, currentSectorOffset, seekDistance);
     }
 
     fclose(file);
@@ -205,7 +206,6 @@ void scan(DiskRequest *requests, int count, const char *outputFile) {
 
     while (1) {
         int readyCount = 0;
-
         //building ready list
         for (int i = 0; i < count; i++) {
             if (!processed[i] && requests[i].arrival_time <= currentTime) {
@@ -214,14 +214,11 @@ void scan(DiskRequest *requests, int count, const char *outputFile) {
             }
         }
         if (readyCount == 0) break;
-
         //sort ready list by cylinder
         qsort(ready, readyCount, sizeof(int), sort_by_cylinder);
-
         //finding next request in the current direction
         int nextRequestIndex = -1;
         int shortestDistance = CYLINDERS;
-
         for (int i = 0; i < readyCount; i++) {
             DiskRequest *req = &requests[ready[i]];
             int distance = abs(req->cylinder - currCylinder);
@@ -238,25 +235,32 @@ void scan(DiskRequest *requests, int count, const char *outputFile) {
                 }
             }
         }
-
         //reversing direction if no valid request found (THIS IS WRONG!! SHOULD FINISH THROUGH ALL CYLINDERS FIRST)
         if (nextRequestIndex == -1) {
             direction = -direction;
             continue;
         }
-
         //processing request
         DiskRequest *request = &requests[nextRequestIndex];
         processed[nextRequestIndex] = 1;
-
         int seekDistance = abs(currCylinder - request->cylinder);
-        double seekTime = (seekDistance == 0) ? 0 : ((0.000028 * seekDistance) + 2) / 1000.0;
+        double seekTime;
+        if (seekDistance == 0) {
+            seekTime = 0;
+        } else {
+            seekTime = ((0.000028 * seekDistance) + 2) / 1000.0;
+        }
         double rotationPeriod = 60.0 / RPM;
         double sectorsPerSecond = SECTORSPERTRACK / rotationPeriod;
         double sectorsPassedDuringSeek = seekTime * sectorsPerSecond;
         currentSectorOffset += sectorsPassedDuringSeek;
         currentSectorOffset = fmod(currentSectorOffset, SECTORSPERTRACK);
-        double sectorsToGo = (currentSectorOffset <= request->sector_offset) ? request->sector_offset - currentSectorOffset : SECTORSPERTRACK - (currentSectorOffset - request->sector_offset);
+        double sectorsToGo;
+        if (currentSectorOffset <= request->sector_offset) {
+            sectorsToGo = request->sector_offset - currentSectorOffset;
+        } else {
+            sectorsToGo = SECTORSPERTRACK - (currentSectorOffset - request->sector_offset);
+        }
         double rotationalLatency = sectorsToGo * (rotationPeriod / SECTORSPERTRACK);
         double transferTime = (request->request_size * LOGICALBLOCKSIZE) / TRANSFERRATE;
         double waitTime = fmax(0, currentTime - request->arrival_time);
@@ -267,7 +271,6 @@ void scan(DiskRequest *requests, int count, const char *outputFile) {
         currentSectorOffset = fmod(request->sector_offset + request->request_size, SECTORSPERTRACK);
         fprintf(file, "%lf %lf %lf %d %d %d %lf %d\n", request->arrival_time, finishTime, waitTime, request->psn + request->request_size, request->cylinder, request->surface, currentSectorOffset, seekDistance);
     }
-
     fclose(file);
     free(processed);
     free(ready);
@@ -278,58 +281,59 @@ int compare_by_cylinder(const void *a, const void *b) {
 }
 
 void clook(DiskRequest *requests, int count, const char *outputFile) {
-    double totalWaitTime = 0, totalSeekTime = 0, totalRotationalLatency = 0;
-    double totalTransferTime = 0, totalServiceTime = 0, totalFinishTime = 0;
-    //increasing order
-    qsort(requests, count, sizeof(DiskRequest), compare_by_cylinder);
     FILE *output = fopen(outputFile, "w");
     if (output == 0) {
         printf("Error opening output file.\n");
         return;
     }
-    int currentCylinder = 0; // Initial cylinder position
-    for (int i = 0; i < count; i++) {
-        DiskRequest *request = &requests[i];
-        double waitTime = fmax(0, totalFinishTime - request->arrival_time);
-        int seekDistance = abs(currentCylinder - request->cylinder);
-        double seekTime = 0;
-        if (seekDistance != 0) {
-            seekTime = ((0.000028 * seekDistance) + 2) / 1000.0;
+    //Sort the requests by cylinder
+    qsort(requests, count, sizeof(DiskRequest), compare_by_cylinder);
+    double currentTime = requests[0].arrival_time;
+    int currentCylinder = 0;
+    //Process requests in ascending order, then wrap around
+    int processedCount = 0;
+    while (processedCount < count) {
+        //First pass: Process requests above the current cylinder
+        for (int i = 0; i < count; i++) {
+            if (requests[i].arrival_time <= currentTime && requests[i].cylinder >= currentCylinder) {
+                processedCount++;
+                DiskRequest *request = &requests[i];
+                //calculate wait time
+                double waitTime = fmax(0, currentTime - request->arrival_time);
+                //calculate seek time
+                int seekDistance = abs(currentCylinder - request->cylinder);
+                double seekTime;
+                if (seekDistance == 0) {
+                    seekTime = 0;
+                } else {
+                    seekTime = ((0.000028 * seekDistance) + 2) / 1000.0;
+                }
+                //Calculate rotational latency
+                double rotationPeriod = 60.0 / RPM;
+                double sectorsPerTrack = SECTORSPERTRACK;
+                double travelTimePerSector = rotationPeriod / sectorsPerTrack;
+                double rotationalLatency = (request->sector_offset) * travelTimePerSector;
+                //Calculate transfer time
+                double transferTime = (request->request_size * LOGICALBLOCKSIZE) / TRANSFERRATE;
+                //Calculate service time and finish time
+                double serviceTime = seekTime + rotationalLatency + transferTime;
+                double finishTime = currentTime + waitTime + serviceTime;
+                //Update current cylinder and time
+                currentCylinder = request->cylinder;
+                currentTime = finishTime;
+                //Calculate PSN
+                request->psn = request->cylinder * SECTORSPERTRACK + request->sector_offset;
+                fprintf(output, "%lf %lf %lf %d %d %d %lf %d\n", request->arrival_time, finishTime, waitTime, request->psn, request->cylinder, request->surface, request->sector_offset, seekDistance);
+            }
         }
-        totalSeekTime += seekTime;
-
-        double rotationPeriod = 60.0 / RPM;
-        double sectorsPerTrack = SECTORSPERTRACK;
-
-        int currentTrack = currentCylinder / sectorsPerTrack;
-        int requestedTrack = request->cylinder / sectorsPerTrack;
-
-        //sector calc
-        int sectorsToGo = abs(currentTrack - requestedTrack);
-
-        double travelTimePerSector = rotationPeriod / sectorsPerTrack;
-        double rotationalLatency = sectorsToGo * travelTimePerSector;
-        totalRotationalLatency += rotationalLatency;
-        double transferTime = (request->request_size * LOGICALBLOCKSIZE) / TRANSFERRATE;
-        totalTransferTime += transferTime;
-        //service time
-        double serviceTime = seekTime + rotationalLatency + transferTime;
-        totalServiceTime += serviceTime;
-        totalFinishTime = request->arrival_time + waitTime + serviceTime;
-        //if (totalFinishTime < request->arrival_time) {
-            //totalFinishTime = request->arrival_time;
-        //}
-        currentCylinder = request->cylinder;
-        //psn
-        request->psn = request->cylinder * SECTORSPERTRACK + request->sector_offset;
-        //request->surface = request->cylinder / TRACKSPERCYLINDER;
-        //print
-        fprintf(output, "%.6f %.6f %.6f %d %d %d %.6f %d\n",
-                request->arrival_time, totalFinishTime, waitTime,
-                request->psn, request->cylinder, request->surface,
-                request->sector_offset, seekDistance);
+        //Wrap around
+        for (int i = 0; i < count; i++) {
+            if (!requests[i].arrival_time || requests[i].cylinder < currentCylinder) {
+                currentCylinder = 0; // Wrap to the smallest cylinder
+                break;
+            }
+        }
     }
-    // Close the output file
     fclose(output);
 }
 
